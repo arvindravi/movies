@@ -15,14 +15,6 @@ import UIKit
 //
 //let url = URL(string: "http://api.themoviedb.org/3/search/movie?api_key=\(APIKey)&query=\(query)&page=\(page)")!
 
-var tasks = [URLSessionTask]()
-let session = URLSession.shared
-
-enum NetworkErrors: Error {
-  case InvalidResponseError
-  case DataProcessingError
-}
-
 struct Resource<A: Decodable>: Decodable {
   var url: URL?
   
@@ -51,21 +43,6 @@ struct Resource<A: Decodable>: Decodable {
     totalPages = try values.decode(Int.self, forKey: .totalPages)
     results = try values.decode(A.self, forKey: .additionalKeys)
     mediaURLs = nil
-  }
-  
-  func load(completion: @escaping (A?, Error?) -> ()) {
-    guard let url = url else { return }
-    session.dataTask(with: url) { (data, _, _) in
-      guard let data = data else { return }
-      let decoder = JSONDecoder()
-      do {
-        let decoded = try decoder.decode(Resource<A>.self, from: data)
-        completion(decoded.results as? A, nil)
-      } catch {
-        print("Error: \(error)!")
-        completion(nil, error)
-      }
-      }.resume()
   }
 }
 

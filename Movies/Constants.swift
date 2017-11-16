@@ -39,3 +39,31 @@ struct URLs {
   }
   static let DefaultURLString = BaseEndpoint.Search + "?api_key=" + K.API.TheMovieDB + "&query="
 }
+
+// Error Messages
+struct ErrorMessages {
+  struct NoMoviesFound {
+    static let title = "No Movies Found"
+    static let message = "There were no movies found for your search term. T.T"
+  }
+  
+  struct ParseError {
+    static let title = "Error Parsing Data"
+    static let message = "We couldn't parse the field "
+  }
+  
+  struct EmptyQuery {
+    static let title = "Empty Query"
+    static let message = "Your search term is empty."
+  }
+  
+  struct InvalidQuery {
+    static let title = "Invalid Query"
+    static let message = "You have entered an invalid query."
+  }
+  
+  struct InvalidURL {
+    static let title = "Invalid URL"
+    static let message = "URL is invalid."
+  }
+}

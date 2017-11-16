@@ -16,11 +16,13 @@ class MoviesViewController: UITableViewController {
   fileprivate var operations = [IndexPath: ImageOperation]()
   
   // Search
-  let searchController: UISearchController = {
-    let searchController = UISearchController(searchResultsController: nil)
-    searchController.dimsBackgroundDuringPresentation = false
-    return searchController
+  let searchController = UISearchController(searchResultsController: nil)
+  let spinner: UIActivityIndicatorView = {
+    let spinner = UIActivityIndicatorView(activityIndicatorStyle: .gray)
+    spinner.hidesWhenStopped = true
+    return spinner
   }()
+  var currentSearchQuery: String = "batman"
   
   // Lifecycle Methods
   override func viewDidLoad() {
@@ -28,28 +30,71 @@ class MoviesViewController: UITableViewController {
     setup()
   }
   
-  //
+  // Setup
   func setup() {
+    setupUI()
     loadMovies()
     setupSearch()
     setupTableView()
   }
   
-  func loadMovies() {
-    controller.load { [weak self] (success, error) in
-      guard success == true else {
-        // Display Error
-        print(error.debugDescription)
-        return
+  func setupUI() {
+    navigationItem.title = "Movies"
+    guard let navigationBar = navigationController?.navigationBar else { return }
+    if #available(iOS 11, *) {
+      navigationBar.prefersLargeTitles = true
+    }
+  }
+  
+  
+  
+  func loadMovies(page: Int = 1) {
+    do {
+      try controller.load(currentSearchQuery, page) { [weak self] (result) in
+        var title: String = "Error"
+        var message: String = ""
+        switch result {
+        case .Success:
+          DispatchQueue.main.async {
+            self?.spinner.stopAnimating()
+            self?.tableView.reloadData()
+          }
+        case .Failure(let error):
+          switch error {
+          case .NoResultsFound:
+            title = ErrorMessages.NoMoviesFound.title
+            message = ErrorMessages.NoMoviesFound.message
+          case .ErrorParsingData(let data):
+            title = ErrorMessages.ParseError.title
+            message = ErrorMessages.ParseError.message + data
+          default: self?.showAlert(title, message: error.localizedDescription)
+          }
+          self?.showAlert(title, message: message)
+        }
       }
-      
-      DispatchQueue.main.async {
-        self?.tableView.reloadData()
-      }
+    } catch LoadMoviesError.EmptyQuery {
+      showAlert(ErrorMessages.EmptyQuery.title, message: ErrorMessages.EmptyQuery.message)
+    } catch LoadMoviesError.InvalidQuery {
+      showAlert(ErrorMessages.InvalidQuery.title, message: ErrorMessages.InvalidQuery.message)
+    } catch LoadMoviesError.InvalidURL {
+      showAlert(ErrorMessages.InvalidURL.title, message: ErrorMessages.InvalidURL.message)
+    } catch {
+      showAlert("Error", message: error.localizedDescription)
     }
   }
   
   func setupSearch() {
+    // Setup Spinner
+    spinner.center = self.view.center
+    tableView.addSubview(spinner)
+    
+    // Setup Search
+    searchController.dimsBackgroundDuringPresentation = false
+    searchController.searchResultsUpdater = self
+    searchController.searchBar.delegate = self
+    
+    definesPresentationContext = true
+    
     if #available(iOS 11, *) {
       self.navigationItem.searchController = searchController
       self.navigationItem.hidesSearchBarWhenScrolling = false
@@ -61,6 +106,7 @@ class MoviesViewController: UITableViewController {
   func setupTableView() {
     tableView.register(MovieCell.self, forCellReuseIdentifier: MovieCell.identifier)
     tableView.prefetchDataSource = self
+    automaticallyAdjustsScrollViewInsets = true
   }
 }
 
@@ -89,9 +135,26 @@ extension MoviesViewController {
   }
 }
 
+extension MoviesViewController: UISearchBarDelegate {
+  func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+    spinner.startAnimating()
+    
+    let searchBar = searchController.searchBar
+    guard let query = searchBar.text else { return }
+    
+    self.currentSearchQuery = query
+    loadMovies()
+  }
+}
+
+extension MoviesViewController: UISearchResultsUpdating {
+  func updateSearchResults(for searchController: UISearchController) {
+    print("updateSearchResults")
+  }
+}
+
 // Prefetching
 extension MoviesViewController: UITableViewDataSourcePrefetching {
-  
   private func prefetchMovie(at indexPath: IndexPath) {
     if let _ = operations[indexPath] { return }
     guard let viewModel = controller.viewModel(at: indexPath.row) else { return }
@@ -122,7 +185,7 @@ extension MoviesViewController: UITableViewDataSourcePrefetching {
   }
 }
 
-// Datasource
+// Datasource Methods
 extension MoviesViewController {
   override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
     return controller.viewModelsCount
@@ -130,7 +193,6 @@ extension MoviesViewController {
   
   override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
     let cell = tableView.dequeueReusableCell(withIdentifier: MovieCell.identifier) as! MovieCell
-    
     if let viewModel = controller.viewModel(at: indexPath.row) {
       cell.configure(viewModel)
       loadImage(for: cell, with: viewModel, at: indexPath)
@@ -139,8 +201,23 @@ extension MoviesViewController {
   }
 }
 
-// Delegates
+// Delegate Methods
 extension MoviesViewController {
+  override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+    return 200
+  }
+  
+  override func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
+    if indexPath.row == controller.viewModelsCount - 1 {
+      let currentPage = controller.currentPage
+      let totalPages = controller.totalPages
+      guard currentPage < totalPages else { return }
+      
+      // TODO: Refactor
+      loadMovies(page: currentPage + 1)
+    }
+  }
+  
   override func tableView(_ tableView: UITableView, didEndDisplaying cell: UITableViewCell, forRowAt indexPath: IndexPath) {
     guard let operation = operations[indexPath] else { return }
     operation.cancel()

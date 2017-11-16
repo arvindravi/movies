@@ -8,42 +8,84 @@
 
 import Foundation
 
-enum ParseError: Error {
-  case JSONParsingError
-  case MoviesParsingError
+enum LoadMoviesError: Error {
+  case InvalidQuery
+  case InvalidURL
+  case InvalidJSON
+  case ErrorFetchingData
+  case ErrorParsingData(String)
+  case NoResultsFound
+  case EmptyQuery
 }
 
 class MovieViewModelController {
   private var viewModels: [MovieViewModel?] = []
+  var currentPage: Int = 1
+  var totalPages: Int = 0
+  var totalResults: Int = 0
   
-  func load(_ completion: @escaping (_ success: Bool, _ error: Error?) -> ()) {
-    let urlString = URLs.DefaultURLString + "batman"
+  enum Result {
+    case Success
+    case Failure(LoadMoviesError)
+  }
+  
+  func load(_ query: String = "batman", _ page: Int = 1, _ completion: @escaping (Result) -> ()) throws {
+    guard !query.trimmingCharacters(in: CharacterSet.whitespaces).isEmpty else { throw LoadMoviesError.EmptyQuery }
+    guard let query = query.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlQueryAllowed) else { throw LoadMoviesError.InvalidQuery }
+    let urlString = URLs.DefaultURLString + query + "&page=" + String(page)
     let session = URLSession.shared
     
-    guard let url = URL(string: urlString) else {
-      completion(false, nil)
-      return
-    }
+    guard let url = URL(string: urlString) else { throw LoadMoviesError.InvalidURL }
     
     let task = session.dataTask(with: url) { [weak self] (data, response, error) in
       guard let strongSelf = self else { return }
       guard let json = data, error == nil else {
-        completion(false, error)
+        completion(.Failure(.InvalidJSON))
         return
       }
       
+      // TODO
       guard let moviesResource = MovieViewModelController.parse(json) else {
-        completion(false, ParseError.JSONParsingError)
+        completion(.Failure(.ErrorParsingData("moviesResource")))
         return
       }
       
-      guard let movies = moviesResource.results as? [Movie] else {
-        completion(false, ParseError.MoviesParsingError)
+      guard let page = moviesResource.page else {
+        completion(.Failure(.ErrorParsingData("page")))
         return
       }
       
-      strongSelf.viewModels = MovieViewModelController.initViewModels(movies)
-      completion(true, nil)
+      guard let totalPages = moviesResource.totalPages else {
+        completion(.Failure(.ErrorParsingData("totalPages")))
+        return
+      }
+      
+      guard let totalResults = moviesResource.totalResults else {
+        completion(.Failure(.ErrorParsingData("totalResults")))
+        return
+      }
+      
+      guard totalResults > 0 else {
+        completion(.Failure(.NoResultsFound))
+        return
+      }
+      
+      guard let movies = moviesResource.results else {
+        completion(.Failure(.ErrorParsingData("movies")))
+        return
+      }
+      
+      if page > 1 {
+        strongSelf.viewModels.append(contentsOf: MovieViewModelController.initViewModels(movies))
+      } else {
+        strongSelf.viewModels = MovieViewModelController.initViewModels(movies)
+      }
+      
+      strongSelf.currentPage = page
+      strongSelf.totalPages = totalPages
+      strongSelf.totalResults = totalResults
+      
+      completion(.Success)
     }
     
     task.resume()
@@ -54,7 +96,7 @@ class MovieViewModelController {
   }
   
   func viewModel(at index: Int) -> MovieViewModel? {
-    guard index > 0 && index < viewModelsCount else { return nil }
+    guard index >= 0 && index < viewModelsCount else { return nil }
     return viewModels[index]
   }
 }

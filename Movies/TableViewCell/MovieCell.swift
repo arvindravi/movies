@@ -19,6 +19,7 @@ class MovieCell: UITableViewCell {
   
   override func prepareForReuse() {
     super.prepareForReuse()
-    imageView?.image = #imageLiteral(resourceName: "Placeholder")
+    imageView?.image = nil
+    textLabel?.text = ""
   }
 }
