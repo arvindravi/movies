@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import UIKit
 
 enum LoadMoviesError: Error {
   case InvalidQuery
@@ -99,6 +100,10 @@ class MovieViewModelController {
     guard index >= 0 && index < viewModelsCount else { return nil }
     return viewModels[index]
   }
+  
+  func flush() {
+    viewModels.removeAll()
+  }  
 }
 
 private extension MovieViewModelController {

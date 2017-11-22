@@ -18,6 +18,7 @@ struct Movie: Decodable {
   let posterPath: String
   let backdropPath: String
   let overview: String
+  let releaseDate: Date
   
   var image: UIImage?
   
@@ -27,6 +28,7 @@ struct Movie: Decodable {
     case originalTitle = "original_title"
     case posterPath    = "poster_path"
     case backdropPath  = "backdrop_path"
+    case releaseDate   = "release_date"
   }
   
   init(from decoder: Decoder) throws {
@@ -39,6 +41,9 @@ struct Movie: Decodable {
     posterPath = try values.decodeIfPresent(String.self, forKey: .posterPath) ?? ""
     backdropPath = try values.decodeIfPresent(String.self, forKey: .backdropPath) ?? ""
     overview = try values.decodeIfPresent(String.self, forKey: .overview) ?? ""
+    
+    let releaseDateString = try values.decodeIfPresent(String.self, forKey: .releaseDate) ?? ""
+    releaseDate = Date.from(string: releaseDateString) ?? Date()
     image = nil
   }
 }

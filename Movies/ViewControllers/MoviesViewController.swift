@@ -11,55 +11,75 @@ import UIKit
 class MoviesViewController: UITableViewController {
   
   // MARK: - Properties
+  public var query: String = ""
+  
   fileprivate var controller = MovieViewModelController()
   fileprivate let operationQueue = OperationQueue()
   fileprivate var operations = [IndexPath: ImageOperation]()
   
-  // Search
-  let searchController = UISearchController(searchResultsController: nil)
   let spinner: UIActivityIndicatorView = {
     let spinner = UIActivityIndicatorView(activityIndicatorStyle: .gray)
     spinner.hidesWhenStopped = true
     return spinner
   }()
-  var currentSearchQuery: String = "batman"
+  
+  // Infinite Scroll
+  let footerSpinner: UIActivityIndicatorView = {
+    let spinner = UIActivityIndicatorView(activityIndicatorStyle: .gray)
+    spinner.hidesWhenStopped = true
+    return spinner
+  }()
   
   // Lifecycle Methods
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    loadMovies() { _ in }
+  }
+  
   override func viewDidLoad() {
     super.viewDidLoad()
     setup()
   }
   
+  override func viewDidDisappear(_ animated: Bool) {
+    super.viewDidDisappear(animated)
+    flushData()
+  }
+  
   // Setup
   func setup() {
-    setupUI()
-    loadMovies()
-    setupSearch()
+    query = (parent is UINavigationController) ? "batman" : ""
+    setupUI() // TODO: Refactor to Styles.swift
     setupTableView()
   }
   
   func setupUI() {
-    navigationItem.title = "Movies"
+    navigationItem.title = (parent?.parent is UISearchController) ? "" : "Movies"
     guard let navigationBar = navigationController?.navigationBar else { return }
     if #available(iOS 11, *) {
-      navigationBar.prefersLargeTitles = true
+      navigationBar.prefersLargeTitles = !(parent?.parent is UISearchController)
     }
   }
   
-  
-  
-  func loadMovies(page: Int = 1) {
+  func loadMovies(page: Int = 1, completion: @escaping (Bool) -> ()) {
+    guard !query.isEmpty else { return }
+    spinner.startAnimating()
     do {
-      try controller.load(currentSearchQuery, page) { [weak self] (result) in
-        var title: String = "Error"
-        var message: String = ""
+      try controller.load(query, page) { [weak self] (result) in
         switch result {
         case .Success:
           DispatchQueue.main.async {
+            if page > 1 { // didLoad additional page
+              self?.footerSpinner.stopAnimating()
+              self?.tableView.tableFooterView = nil
+            }
             self?.spinner.stopAnimating()
             self?.tableView.reloadData()
           }
+          completion(true)
         case .Failure(let error):
+          var title: String = "Error"
+          var message: String = ""
           switch error {
           case .NoResultsFound:
             title = ErrorMessages.NoMoviesFound.title
@@ -69,7 +89,11 @@ class MoviesViewController: UITableViewController {
             message = ErrorMessages.ParseError.message + data
           default: self?.showAlert(title, message: error.localizedDescription)
           }
-          self?.showAlert(title, message: message)
+          DispatchQueue.main.async {
+            self?.spinner.stopAnimating()
+            self?.showAlert(title, message: message)
+          }
+          completion(false)
         }
       }
     } catch LoadMoviesError.EmptyQuery {
@@ -83,41 +107,37 @@ class MoviesViewController: UITableViewController {
     }
   }
   
-  func setupSearch() {
-    // Setup Spinner
-    spinner.center = self.view.center
+  func setupTableView() {
+    spinner.center = tableView.center
     tableView.addSubview(spinner)
     
-    // Setup Search
-    searchController.dimsBackgroundDuringPresentation = false
-    searchController.searchResultsUpdater = self
-    searchController.searchBar.delegate = self
+    tableView.register(MovieCell.self, forCellReuseIdentifier: MovieCell.identifier)
+    automaticallyAdjustsScrollViewInsets = true
     
-    definesPresentationContext = true
+    // Spinner - Footer View (Infinite Scroll)
+    footerSpinner.frame = CGRect(x: 0, y: 0, width: 320, height: 44)
+    tableView.tableFooterView = footerSpinner
     
-    if #available(iOS 11, *) {
-      self.navigationItem.searchController = searchController
-      self.navigationItem.hidesSearchBarWhenScrolling = false
-    } else {
-      tableView.tableHeaderView = searchController.searchBar
+    // Prefetch
+    if #available(iOS 10, *) {
+      tableView.prefetchDataSource = self
     }
   }
   
-  func setupTableView() {
-    tableView.register(MovieCell.self, forCellReuseIdentifier: MovieCell.identifier)
-    tableView.prefetchDataSource = self
-    automaticallyAdjustsScrollViewInsets = true
+  func flushData() {
+    controller.flush()
+    tableView.reloadData()
   }
 }
 
 // Async Image Load
-typealias Operations = [IndexPath: ImageOperation]
 extension MoviesViewController {
   private func loadImage(for cell: MovieCell, with viewModel: MovieViewModel, at indexPath: IndexPath) {
     if let operation = operations[indexPath] {
       guard let image = operation.image else { return }
       DispatchQueue.main.async {
         cell.imageView?.image = image
+        cell.setNeedsLayout()
       }
     } else {
       guard let url = URL(string: URLs.BaseEndpoint.Image + viewModel.posterPath) else { return }
@@ -126,6 +146,7 @@ extension MoviesViewController {
         guard let strongSelf = self else { return }
         DispatchQueue.main.async {
           cell.imageView?.image = image
+          cell.setNeedsLayout()
         }
         strongSelf.operations.removeValue(forKey: indexPath)
       }
@@ -135,25 +156,8 @@ extension MoviesViewController {
   }
 }
 
-extension MoviesViewController: UISearchBarDelegate {
-  func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-    spinner.startAnimating()
-    
-    let searchBar = searchController.searchBar
-    guard let query = searchBar.text else { return }
-    
-    self.currentSearchQuery = query
-    loadMovies()
-  }
-}
 
-extension MoviesViewController: UISearchResultsUpdating {
-  func updateSearchResults(for searchController: UISearchController) {
-    print("updateSearchResults")
-  }
-}
-
-// Prefetching
+// MARK: - Prefetching
 extension MoviesViewController: UITableViewDataSourcePrefetching {
   private func prefetchMovie(at indexPath: IndexPath) {
     if let _ = operations[indexPath] { return }
@@ -173,8 +177,6 @@ extension MoviesViewController: UITableViewDataSourcePrefetching {
   func tableView(_ tableView: UITableView, prefetchRowsAt indexPaths: [IndexPath]) {
     indexPaths.forEach {
       prefetchMovie(at: $0)
-      
-      print(String.init(format: "prefetchRowsAt #%i", $0.row))
     }
   }
   
@@ -185,7 +187,7 @@ extension MoviesViewController: UITableViewDataSourcePrefetching {
   }
 }
 
-// Datasource Methods
+// MARK: - Datasource Methods
 extension MoviesViewController {
   override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
     return controller.viewModelsCount
@@ -201,7 +203,7 @@ extension MoviesViewController {
   }
 }
 
-// Delegate Methods
+// MARK: - Delegate Methods
 extension MoviesViewController {
   override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
     return 200
@@ -212,9 +214,11 @@ extension MoviesViewController {
       let currentPage = controller.currentPage
       let totalPages = controller.totalPages
       guard currentPage < totalPages else { return }
-      
       // TODO: Refactor
-      loadMovies(page: currentPage + 1)
+      tableView.tableFooterView = footerSpinner
+      footerSpinner.startAnimating()
+      
+      loadMovies(page: currentPage + 1) { _ in }
     }
   }
   
@@ -222,5 +226,13 @@ extension MoviesViewController {
     guard let operation = operations[indexPath] else { return }
     operation.cancel()
     operations.removeValue(forKey: indexPath)
+  }
+  
+  override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    guard let movieViewModel = controller.viewModel(at: indexPath.row) else { return }
+    let detailVC = MovieDetailViewController(style: .grouped)
+    detailVC.movie = movieViewModel
+    detailVC.navigationItem.title = movieViewModel.title
+    show(detailVC, sender: nil)
   }
 }

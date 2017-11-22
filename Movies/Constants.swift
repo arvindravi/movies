@@ -24,6 +24,9 @@
 
 import Foundation
 
+let kRecentSearchTermsCount = 10
+let kRecentSearchQueriesKey = "RecentSearchQueries"
+
 // Keys
 struct K {
   struct API {
@@ -44,7 +47,7 @@ struct URLs {
 struct ErrorMessages {
   struct NoMoviesFound {
     static let title = "No Movies Found"
-    static let message = "There were no movies found for your search term. T.T"
+    static let message = "There were no movies found for your search term."
   }
   
   struct ParseError {

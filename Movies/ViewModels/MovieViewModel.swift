@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import UIKit
 
 struct MovieViewModel {
   let voteCount: Int
@@ -17,6 +18,7 @@ struct MovieViewModel {
   let posterPath: String
   let backdropPath: String
   let overview: String
+  let releaseDate: Date
   
   init(movie: Movie) {
     voteCount = movie.voteCount
@@ -27,5 +29,6 @@ struct MovieViewModel {
     posterPath = movie.posterPath
     backdropPath = movie.backdropPath
     overview = movie.overview
+    releaseDate = movie.releaseDate
   }
 }
