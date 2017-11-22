@@ -164,7 +164,6 @@
 				A4F3C13B1FBB1493007F0328 /* AppDelegate.swift */,
 				A4F3C1421FBB1493007F0328 /* Assets.xcassets */,
 				A4F3C1441FBB1493007F0328 /* LaunchScreen.storyboard */,
-				A4F3C1471FBB1493007F0328 /* Info.plist */,
 			);
 			path = "Supporting Files";
 			sourceTree = "<group>";
@@ -190,6 +189,7 @@
 		A4F3C13A1FBB1493007F0328 /* Movies */ = {
 			isa = PBXGroup;
 			children = (
+				A4F3C1471FBB1493007F0328 /* Info.plist */,
 				A41BCAB41FBD5E9000F0A559 /* Models */,
 				A41BCAB71FBD5ECE00F0A559 /* ViewModels */,
 				A41BCABA1FBD5F8300F0A559 /* Controllers */,
